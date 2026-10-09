@@ -67,21 +67,67 @@ def F(size, weight="Regular"):
 
 _TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9\.\-–—%/_+]*|\s+|.", re.S)
 
+# 中文排版避头尾规则：这些字符不允许出现在行首 / 行尾
+_NO_START = "，。、；：？！）〉》」』】〕｝”’·…—%‰℃,.;:?!)]}>*"
+_NO_END = "（〈《「『【〔｛“‘([{<"
+
+
+AUDIT = []      # 溢出自检记录：(文本片段, 实际宽, 容器宽)，出图脚本结尾会打印
+
 
 def wrap(text, font, max_w):
-    """中英混排折行：中文逐字断，英文/数字整体不拆"""
+    """
+    中英混排折行：中文逐字断，英文/数字整体不拆，并处理中文避头尾。
+    ——行首不放标点，行尾不放开引号/开括号。
+    """
     out = []
     for para in text.split("\n"):
         toks = _TOKEN.findall(para)
         cur = ""
         for t in toks:
-            if font.getlength(cur + t) <= max_w or not cur.strip():
+            if not cur.strip():
                 cur += t
-            else:
-                out.append(cur.rstrip())
-                cur = "" if t.isspace() else t.lstrip()
+                continue
+            if font.getlength(cur + t) <= max_w:
+                cur += t
+                continue
+            # 避头：标点不能落在行首 → 连同上一行末尾的字一起带到下一行
+            # （注意：不能把标点硬塞进本行，那会让本行超出 max_w）
+            if t[0] in _NO_START:
+                k = 1
+                while len(cur) - k > 0 and cur[-k] in _NO_START:
+                    k += 1
+                if len(cur) - k > 0:
+                    carry, cur = cur[-k:], cur[:-k]
+                    out.append(cur.rstrip())
+                    cur = carry + t
+                    continue
+            # 避尾：本行末尾是开引号 / 开括号 → 挪到下一行
+            carry = ""
+            while cur and cur[-1] in _NO_END:
+                carry = cur[-1] + carry
+                cur = cur[:-1]
+            out.append(cur.rstrip())
+            cur = carry + ("" if t.isspace() else t.lstrip())
         out.append(cur.rstrip())
+    while out and out[-1] == "":          # 去掉避头合并产生的空尾行
+        out.pop()
+    out = out or [""]
+    # 自检：出现宽度超过容器的行就记录（单字符行属于无解情况，不记）
+    for ln in out:
+        w = font.getlength(ln)
+        if len(ln) > 1 and w > max_w + 0.5:
+            AUDIT.append((ln[:26], int(w), int(max_w)))
     return out
+
+
+def fit_size(text, max_w, size, weight="Regular", lo=20):
+    """从给定字号开始逐号缩小，直到整段（单行）能放进 max_w。返回可用字号。"""
+    while size > lo:
+        if F(size, weight).getlength(text) <= max_w:
+            return size
+        size -= 1
+    return lo
 
 
 def text_block(d, x, y, text, font, fill, max_w=None, lh=1.60, spacing=0, anchor=None):
@@ -98,6 +144,13 @@ def text_block(d, x, y, text, font, fill, max_w=None, lh=1.60, spacing=0, anchor
             d.text((x, y), ln, font=font, fill=fill)
         y += step
     return y - step + int(font.size * 1.30)
+
+
+def text_height(text, font, max_w, lh=1.60, spacing=0):
+    """预算一段自动折行文本将占用的高度，与 text_block 实际画出的一致"""
+    n = len(wrap(text, font, max_w))
+    step = int(font.size * lh) + spacing
+    return (n - 1) * step + int(font.size * 1.30)
 
 
 def measure_lines(text, font, max_w):
@@ -163,6 +216,75 @@ def card(d, y0, y1, fill=CARD, x0=None, x1=None, radius=28, outline=None, ow=2):
     return y1
 
 
+CARD_PAD_X = 48            # 卡片统一的左右内边距
+CARD_PAD_Y = 44            # 卡片统一的上下内边距下限
+
+
+def card_fit(d, y, items, fill=CARD, radius=28, pad_x=None, pad_y=None,
+             gap=24, min_h=0, x0=None, x1=None, outline=None, ow=2):
+    """
+    【自动高度卡片】—— 先量内容，再画底，最后把内容整体垂直居中。
+    从此不需要手写卡片高度，也不会出现「上留白 44、下留白 6」这种问题。
+
+    items 每项为下列之一：
+      ("text", 文本, font, 颜色, 行高[, 与下一项的间距])
+      ("h",    高度, 绘制函数[, 与下一项的间距])
+      自定义块的绘制函数签名：fn(draw, x, y, max_w)
+    返回卡片底部 y。
+    """
+    pad_x = CARD_PAD_X if pad_x is None else pad_x
+    pad_y = CARD_PAD_Y if pad_y is None else pad_y
+    x0 = M if x0 is None else x0
+    x1 = W - M if x1 is None else x1
+    ix, iw = x0 + pad_x, (x1 - x0) - pad_x * 2
+
+    hs, gaps = [], []
+    for it in items:
+        if it[0] == "text":
+            hs.append(text_height(it[1], it[2], iw, it[4]))
+            gaps.append(it[5] if len(it) > 5 else gap)
+        else:
+            hs.append(int(it[1]))
+            gaps.append(it[3] if len(it) > 3 else gap)
+    content_h = sum(hs) + sum(gaps[:-1])
+    h = max(content_h + pad_y * 2, min_h)
+
+    d.rounded_rectangle([x0, y, x1, y + h], radius=radius, fill=fill,
+                        outline=outline, width=ow if outline else 0)
+
+    yy = y + (h - content_h) // 2          # ← 垂直居中，而不是顶部对齐
+    for it, bh, gp in zip(items, hs, gaps):
+        if it[0] == "text":
+            text_block(d, ix, yy, it[1], it[2], it[3], max_w=iw, lh=it[4])
+        else:
+            it[2](d, ix, yy, iw)
+        yy += bh + gp
+    return y + h
+
+
+def points_block(d, x, y, w, points, num_size=38, text_size=36, gap=42,
+                 num_color=RED, text_color=INK2, lh=1.5):
+    """
+    带两位序号的要点清单（卡片内可用）。返回底部 y。
+    高度用 points_height() 预算。
+    """
+    fn, ft = F(num_size, "Bold"), F(text_size, "Regular")
+    gap_w = int(num_size * 1.85)
+    yy = y
+    for i, t in enumerate(points, 1):
+        d.text((x, yy + int(num_size * 0.08)), f"{i:02d}", font=fn, fill=num_color)
+        yy = text_block(d, x + gap_w, yy, t, ft, text_color,
+                        max_w=w - gap_w, lh=lh) + gap
+    return yy - gap
+
+
+def points_height(points, w, num_size=38, text_size=36, gap=42, lh=1.5):
+    ft = F(text_size, "Regular")
+    gap_w = int(num_size * 1.85)
+    return (sum(text_height(t, ft, w - gap_w, lh) for t in points)
+            + gap * (len(points) - 1))
+
+
 def pill(d, x, y, text, font=None, fg=INK, bg=CARD, padx=26, pady=14):
     """小标签胶囊，返回 (宽度, 高度)"""
     font = font or F(30, "Medium")
@@ -188,6 +310,12 @@ def stat(d, x, y, label, value, color=INK, size=116, label_size=32, label_gap=16
     d.text((x, y), value, font=fv, fill=color)
     y += int(size * 1.05)
     return y
+
+
+def stat_big(d, x, y, value, size=118, color=RED):
+    """超大数字（卡片主数据）。返回底部 y"""
+    d.text((x, y), value, font=F(size, "Bold"), fill=color)
+    return y + int(size * 1.05)
 
 
 def stat_pair(d, y, items, gap=40):
@@ -238,7 +366,7 @@ def checklist(d, y, items, num_size=40, text_size=36, gap=34, num_color=RED):
 
 
 def hbar_chart(d, y, rows, max_value, bar_h=62, value_size=52, label_size=32,
-               track=CARD2, width=None):
+               track=CARD2, width=None, reserve=None):
     """
     横向条形图，纯 PIL 手绘。
     rows = [(标签, 数值, 显示文本, 颜色), ...]
@@ -247,8 +375,8 @@ def hbar_chart(d, y, rows, max_value, bar_h=62, value_size=52, label_size=32,
     width = width or BODY_W
     fv = F(value_size, "Bold")
     fl = F(label_size, "Medium")
-    # 给数值文字留出右侧空间
-    reserve = 190
+    # 右侧数值区宽度按实际文字量算，保证最长的数值也不会顶到安全边距
+    reserve = reserve or int(max(fv.getlength(r[2]) for r in rows) + 56)
     track_w = width - reserve
     for label, value, show, color in rows:
         d.text((M, y), label, font=fl, fill=MUTED)
@@ -274,13 +402,16 @@ def dot_field(d, x0, y0, x1, y1, red_ratio, seed, cell=16, gap=5, mixed=True, sp
     import random
     rnd = random.Random(seed)
     step = cell + gap
-    cols = int((x1 - x0) // step)
-    rows = int((y1 - y0) // step)
+    cols = max(int((x1 - x0 + gap) // step), 1)
+    rows = max(int((y1 - y0 + gap) // step), 1)
+    # 点阵整体在给定矩形内居中，避免底部/右侧留出参差不齐的空隙
+    ox = x0 + ((x1 - x0) - (cols * step - gap)) // 2
+    oy = y0 + ((y1 - y0) - (rows * step - gap)) // 2
     split = int(cols * split_at)
     for r in range(rows):
         for c in range(cols):
             is_red = (rnd.random() < red_ratio) if mixed else (c >= split)
-            px, py = x0 + c * step, y0 + r * step
+            px, py = ox + c * step, oy + r * step
             d.rounded_rectangle([px, py, px + cell, py + cell], radius=4,
                                 fill=DOT_TEST if is_red else DOT_TRAIN)
     return x0, x1

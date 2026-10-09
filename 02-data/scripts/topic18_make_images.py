@@ -49,7 +49,7 @@ def page01():
     y = title(d, "你的 94% 准确率\n可能只是在背答案", 322, size=84)
     rule(d, y + 64)
 
-    ny = 661
+    ny = 632
     f_big, fa = F(158, "Bold"), F(90, "Regular")
     s1, s2 = f"{f1_a:.2f}", f"{mean_b:.2f}"
     x = M
@@ -63,12 +63,10 @@ def page01():
     rule(d, ny + 282)
 
     cy = ny + 344
-    card(d, cy, cy + 164, fill=RED_BG, radius=26)
-    text_block(d, M + 46, cy + 40,
-               "这一篇会给你三个自查问题\n判断手里的分数是真的，还是测出来的假象",
-               F(38, "Medium"), "#9E2A1C", max_w=BODY_W - 92, lh=1.44)
-
-    end = cy + 206
+    end = card_fit(d, cy, [
+        ("text", "这一篇会给你三个自查问题\n判断手里的分数是真的，还是测出来的假象",
+         F(38, "Medium"), "#9E2A1C", 1.44),
+    ], fill=RED_BG) + 44
     d.text((M, end), "数据：UCI Covertype（美国林务局公开数据集）· 581,012 条",
            font=F(28, "Regular"), fill=MUTED)
     footer(d, 1)
@@ -87,19 +85,18 @@ def page02():
         ("换个考场 · 得分", "0.266", RED),
     ])
 
-    cy = y + 74
-    card(d, cy, cy + 300, fill=CARD, radius=28)
-    yy = cy + 42
-    for i, t in enumerate([
+    pts = [
         "随机划分会系统性高估模型能力。",
         "换个城市、换时间段、换用户，都是换考场。",
         "不是模型变笨了，是之前那道题太简单。",
-    ], 1):
-        d.text((M + 44, yy + 3), f"{i:02d}", font=F(38, "Bold"), fill=RED)
-        yy = text_block(d, M + 112, yy, t, F(36, "Regular"), INK2,
-                        max_w=BODY_W - 156, lh=1.5) + 44
-
-    end = cy + 340
+    ]
+    iw = BODY_W - 2 * CARD_PAD_X
+    pq = dict(num_size=38, text_size=36, gap=42)
+    cy = y + 74
+    end = card_fit(d, cy, [
+        ("h", points_height(pts, iw, **pq),
+         lambda dd, x, yy, w: points_block(dd, x, yy, w, pts, **pq)),
+    ], fill=CARD) + 40
     d.text((M, end), "得分 = Macro-F1，7 个类别平均后的分数，比准确率更能暴露问题",
            font=F(28, "Regular"), fill=SUB)
     footer(d, 2)
@@ -154,13 +151,12 @@ def page04():
         if i < len(rows) - 1:
             rule(d, yy - 40, color=LINE)
 
-    cy = yy + 20
-    card(d, cy, cy + 156, fill=RED_BG, radius=26)
-    text_block(d, M + 46, cy + 44,
-               "数据集本身不是重点。\n重点是下面两种考法，结果差了 3 倍多。",
-               F(36, "Medium"), "#9E2A1C", max_w=BODY_W - 92, lh=1.46)
+    end = card_fit(d, yy + 20, [
+        ("text", "数据集本身不是重点。\n重点是下面两种考法，结果差了 3 倍多。",
+         F(36, "Medium"), "#9E2A1C", 1.46),
+    ], fill=RED_BG)
     footer(d, 4)
-    return img, cy + 156
+    return img, end
 
 
 # ============================================================ 05 考法一
@@ -178,14 +174,10 @@ def page05():
         ("Macro-F1 得分", f"{f1_a:.3f}", INK),
     ])
 
-    cy = y + 84
-    card(d, cy, cy + 150, fill=CARD, radius=26)
-    d.text((M + 46, cy + 44), "在课堂上，这是一份满分答卷。",
-           font=F(38, "Bold"), fill=INK)
-    d.text((M + 46, cy + 102), "换成任何一份作业，你都会直接交上去。",
-           font=F(32, "Regular"), fill=SUB)
-
-    end = cy + 208
+    end = card_fit(d, y + 84, [
+        ("text", "在课堂上，这是一份满分答卷。", F(38, "Bold"), INK, 1.5),
+        ("text", "换成任何一份作业，你都会直接交上去。", F(32, "Regular"), SUB, 1.5),
+    ], fill=CARD, gap=20) + 44
     d.text((M, end), "但它考的是「同一片区域里的原题」。", font=F(32, "Medium"), fill=RED)
     footer(d, 5)
     return img, end + 42
@@ -200,26 +192,25 @@ def page06():
                    "数据自带 4 个地理区域。每次拿 3 块训练、留 1 块测试 —— "
                    "这一块地方，模型从头到尾没见过。",
                    F(34, "Regular"), INK2, lh=1.6)
-    rule(d, y + 64)
+    rule(d, y + 56)
 
-    y = stat_grid(d, y + 130, [
+    y = stat_grid(d, y + 98, [
         ("区域 1", f"{bs[0]:.3f}", RED),
         ("区域 2", f"{bs[1]:.3f}", RED),
         ("区域 3", f"{bs[2]:.3f}", RED),
         ("区域 4", f"{bs[3]:.3f}", RED),
     ], cols=4, gapx=14, size=62, label_size=28)
 
-    cy = y + 64
-    card(d, cy, cy + 238, fill=RED_BG, radius=26)
-    f_big = F(118, "Bold")
     sv = f"{mean_b:.3f}"
-    d.text((M + 46, cy + 44), sv, font=f_big, fill=RED)
-    d.text((M + 46 + f_big.getlength(sv) + 34, cy + 92),
-           f"平均分 · 比随机划分低 {drop:.0f}%", font=F(38, "Bold"), fill="#9E2A1C")
-    d.text((M + 46, cy + 178), f"最差的一块地方，只有 {worst_b:.3f}。",
-           font=F(34, "Regular"), fill="#9E2A1C")
+    f_big = F(104, "Bold")
+    end = card_fit(d, y + 52, [
+        ("h", int(104 * 1.05),
+         lambda dd, x, yy, w: dd.text((x, yy), sv, font=f_big, fill=RED), 30),
+        ("text", f"平均分 · 比随机划分低 {drop:.0f}%", F(36, "Bold"), "#9E2A1C", 1.45, 20),
+        ("text", f"最差的一块地方，只有 {worst_b:.3f}。", F(31, "Regular"), "#B4574A", 1.5),
+    ], fill=RED_BG, pad_y=38, gap=20)
     footer(d, 6)
-    return img, cy + 238
+    return img, end
 
 
 # ============================================================ 07 对比
@@ -234,14 +225,15 @@ def page07():
         ("按区域留一（模型没见过的地方）", mean_b, f"{mean_b:.3f}", RED),
     ], max_value=f1_a, bar_h=74, value_size=56, label_size=33)
 
-    cy = y + 92
-    card(d, cy, cy + 248, fill=CARD, radius=26)
-    d.text((M + 46, cy + 44), f"↓ {drop:.0f}%", font=F(96, "Bold"), fill=RED)
-    text_block(d, M + 46, cy + 172,
-               "模型没变，数据没变，只是考卷换了一种出法。",
-               F(36, "Medium"), INK2, max_w=BODY_W - 92, lh=1.5)
+    f_drop = F(96, "Bold")
+    end = card_fit(d, y + 92, [
+        ("h", int(96 * 1.05),
+         lambda dd, x, yy, w: dd.text((x, yy), f"↓ {drop:.0f}%", font=f_drop, fill=RED)),
+        ("text", "模型没变，数据没变，只是考卷换了一种出法。",
+         F(36, "Medium"), INK2, 1.5),
+    ], fill=CARD, gap=22)
     footer(d, 7)
-    return img, cy + 248
+    return img, end
 
 
 # ============================================================ 08 为什么
@@ -255,23 +247,23 @@ def page08():
         ("随机划分", "mixed", "训练和测试来自同一片区域 —— 相当于考原题。"),
         ("按区域留一", "split", "整块区域从没进过训练集 —— 相当于换考场。"),
     ]
-    yy = y + 112
+    yy = y + 130
     for i, (label, mode, cap) in enumerate(blocks):
         d.text((M, yy), label, font=F(36, "Bold"), fill=INK)
         if i == 0:
             legend(d, W - M, yy + 4, [(DOT_TRAIN, "训练集"), (RED, "测试集")])
-        yy += 54
+        yy += 52
         compare_strip(d, yy, M, W - M, 132, mode, seed=11 if mode == "mixed" else 0)
         yy = text_block(d, M, yy + 152, cap, F(32, "Regular"), INK2,
-                        max_w=BODY_W, lh=1.5) + 54
+                        max_w=BODY_W, lh=1.5) + 52
 
-    end = yy + 6
-    card(d, end, end + 148, fill=RED_BG, radius=26)
-    text_block(d, M + 46, end + 52,
-               "分数掉下来不是模型变笨了，是之前那道题太简单。",
-               F(36, "Bold"), "#9E2A1C", max_w=BODY_W - 92, lh=1.45)
+    s8 = "分数掉下来不是模型变笨了，是之前那道题太简单。"
+    end = card_fit(d, yy + 4, [
+        ("text", s8, F(fit_size(s8, BODY_W - 2 * CARD_PAD_X, 36, "Bold"), "Bold"),
+         "#9E2A1C", 1.45),
+    ], fill=RED_BG)
     footer(d, 8)
-    return img, end + 148
+    return img, end
 
 
 # ============================================================ 09 自查
@@ -287,14 +279,13 @@ def page09():
         "别只看准确率。7 个类别里只猜中多数类，准确率也可能很好看。",
     ], num_size=38, text_size=34, gap=36)
 
-    cy = y + 72
-    card(d, cy, cy + 196, fill=CARD, radius=26)
-    d.text((M + 46, cy + 42), "你的项目掉过多少？", font=F(38, "Bold"), fill=INK)
-    text_block(d, M + 46, cy + 106,
-               "评论区报个数 —— 留言最多的那种数据，我下期拿真实数据跑一遍。",
-               F(33, "Regular"), INK2, max_w=BODY_W - 92, lh=1.5)
+    end = card_fit(d, y + 72, [
+        ("text", "你的项目掉过多少？", F(38, "Bold"), INK, 1.5),
+        ("text", "评论区报个数。\n留言最多的那种数据，我下期拿真实数据跑一遍。",
+         F(33, "Regular"), INK2, 1.5),
+    ], fill=CARD, gap=22)
     footer(d, 9)
-    return img, cy + 196
+    return img, end
 
 
 PAGES = [
@@ -328,4 +319,12 @@ if __name__ == "__main__":
         print("!! 以下页面超出正文区：", over)
     else:
         print("全部通过，无溢出")
+
+    uniq = sorted(set(AUDIT))
+    if uniq:
+        print(f"!! 有 {len(uniq)} 处文字宽度超出容器：")
+        for t, w, mw in uniq:
+            print(f"   「{t}」宽 {w} > 容器 {mw}")
+    else:
+        print("文字宽度检查通过，无超宽行")
     print(f"A f1={f1_a:.4f} acc={acc_a:.4f} | B mean={mean_b:.4f} worst={worst_b:.4f} | drop={drop:.1f}%")
