@@ -2,6 +2,10 @@
 02-data/raw/
 *.jsonl
 
+# 字体：二进制，用 02-data/assets/fetch_fonts.sh 拉取
+02-data/assets/fonts/*.ttf
+02-data/assets/fonts/*.otf
+
 # 环境与密钥
 .env
 .venv/

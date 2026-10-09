@@ -1,328 +1,331 @@
 # -*- coding: utf-8 -*-
 """
-选题 #18 出图：生成 9 张 1080x1440 成品图
-读取 ../results/topic18_result.json，输出 ../../03-output/topic18-换个考场不及格/
+选题 #18 出图 —— 「你的 94% 准确率，可能只是在背答案」
+
+叙事线（全篇只讲一件事）：
+  01 封面：抛钩子
+  02 结论：先说答案
+  03 关联：这跟你有什么关系        ← 旧版缺这一页，读者不知道看点在哪
+  04 方法：实验对象（一句话带过）
+  05 对照 A：随机抽题 → 高分
+  06 对照 B：换个考场 → 崩盘
+  07 对比：一张图看完
+  08 原因：在背答案
+  09 行动：三个自查问题
+
+运行：python3 topic18_make_images.py
+每页会自检是否溢出正文区（BODY_BOTTOM = 1268）
 """
+
 import os
+import sys
 import json
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib import font_manager
-from PIL import Image, ImageDraw, ImageFont
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from xhs_kit import *  # noqa
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RES_JSON = os.path.join(HERE, "..", "results", "topic18_result.json")
-OUT_DIR = os.path.join(HERE, "..", "..", "03-output", "topic18-换个考场不及格")
-os.makedirs(OUT_DIR, exist_ok=True)
+RESULT_JSON = os.path.join(HERE, "..", "results", "topic18_result.json")
+OUT = os.path.join(HERE, "..", "..", "03-output", "topic18-换个考场不及格")
 
-# ---------- 视觉规范 ----------
-BG = (230, 241, 251)          # #E6F1FB
-MAIN = (24, 95, 165)          # #185FA5
-SUB = (133, 183, 235)         # #85B7EB
-ACCENT = (216, 90, 48)        # #D85A30
-TEXT = (44, 44, 42)           # #2C2C2A
-MUTED = (95, 94, 90)          # #5F5E5A
-WHITE = (255, 255, 255)
-W, H = 1080, 1440
+with open(RESULT_JSON, encoding="utf-8") as f:
+    ROWS = json.load(f)
 
-FONT_PATH = "/System/Library/Fonts/STHeiti Medium.ttc"
-font_manager.fontManager.addfont("/Library/Fonts/Arial Unicode.ttf")
-plt.rcParams["font.sans-serif"] = ["Arial Unicode MS"]
-plt.rcParams["axes.unicode_minus"] = False
+A = [r for r in ROWS if r["场景"] == "A_随机划分"][0]
+B = [r for r in ROWS if r["场景"] == "B_留出地理区域"]
+f1_a, acc_a = A["Macro_F1"], A["准确率"]
+bs = [r["Macro_F1"] for r in B]
+mean_b, worst_b = sum(bs) / len(bs), min(bs)
+drop = (1 - mean_b / f1_a) * 100
 
 
-def F(size):
-    return ImageFont.truetype(FONT_PATH, size)
+# ============================================================ 01 封面
+def page01():
+    img, d = new_page()
+    kicker(d, "数据实测 01")
+    text_block(d, M, 246, "我把本科踩过的一个坑，用 58 万条真实数据复现了一遍",
+               F(34, "Medium"), SUB, lh=1.5)
+
+    y = title(d, "你的 94% 准确率\n可能只是在背答案", 322, size=84)
+    rule(d, y + 64)
+
+    ny = 661
+    f_big, fa = F(158, "Bold"), F(90, "Regular")
+    s1, s2 = f"{f1_a:.2f}", f"{mean_b:.2f}"
+    x = M
+    d.text((x, ny), s1, font=f_big, fill=INK)
+    x += f_big.getlength(s1) + 30
+    d.text((x, ny + 34), "→", font=fa, fill=FAINT)
+    x += fa.getlength("→") + 30
+    d.text((x, ny), s2, font=f_big, fill=RED)
+    d.text((M, ny + 202), "同一个模型 · 同一份数据 · 只换了一种考法",
+           font=F(38, "Medium"), fill=INK2)
+    rule(d, ny + 282)
+
+    cy = ny + 344
+    card(d, cy, cy + 164, fill=RED_BG, radius=26)
+    text_block(d, M + 46, cy + 40,
+               "这一篇会给你三个自查问题\n判断手里的分数是真的，还是测出来的假象",
+               F(38, "Medium"), "#9E2A1C", max_w=BODY_W - 92, lh=1.44)
+
+    end = cy + 206
+    d.text((M, end), "数据：UCI Covertype（美国林务局公开数据集）· 581,012 条",
+           font=F(28, "Regular"), fill=MUTED)
+    footer(d, 1)
+    return img, end + 36
 
 
-def wrap(text, font, max_w):
-    lines, cur = [], ""
-    for ch in text:
-        if ch == "\n":
-            lines.append(cur); cur = ""; continue
-        if font.getlength(cur + ch) > max_w:
-            lines.append(cur); cur = ch
-        else:
-            cur += ch
-    if cur:
-        lines.append(cur)
-    return lines
+# ============================================================ 02 先说结论
+def page02():
+    img, d = new_page()
+    kicker(d, "先说结论")
+    y = big_title_center(d, "同一个模型\n成绩差了 71%", 244, size=82)
+    rule(d, y + 70)
+
+    y = stat_pair(d, y + 142, [
+        ("随机划分 · 得分", "0.920", INK),
+        ("换个考场 · 得分", "0.266", RED),
+    ])
+
+    cy = y + 74
+    card(d, cy, cy + 300, fill=CARD, radius=28)
+    yy = cy + 42
+    for i, t in enumerate([
+        "随机划分会系统性高估模型能力。",
+        "换个城市、换时间段、换用户，都是换考场。",
+        "不是模型变笨了，是之前那道题太简单。",
+    ], 1):
+        d.text((M + 44, yy + 3), f"{i:02d}", font=F(38, "Bold"), fill=RED)
+        yy = text_block(d, M + 112, yy, t, F(36, "Regular"), INK2,
+                        max_w=BODY_W - 156, lh=1.5) + 44
+
+    end = cy + 340
+    d.text((M, end), "得分 = Macro-F1，7 个类别平均后的分数，比准确率更能暴露问题",
+           font=F(28, "Regular"), fill=SUB)
+    footer(d, 2)
+    return img, end + 36
 
 
-def card():
-    img = Image.new("RGB", (W, H), BG)
-    return img, ImageDraw.Draw(img)
+# ============================================================ 03 这跟你有什么关系
+def page03():
+    img, d = new_page()
+    y = kicker(d, "为什么值得你看完")
+    y = title(d, "这个坑\n你大概已经踩了", 252, size=80)
+    rule(d, y + 62)
+
+    rows = [
+        ("课程作业", "随机抽 20% 当测试集，跑出 94%。\n这个分数只在「这套考法」里成立。"),
+        ("实习 / 比赛", "模型上线后面对的是没见过的用户、\n没见过的时间段 —— 那才是真考场。"),
+        ("论文 / 答辩", "被问「你的测试集怎么划的」，\n答不上来，前面的分数都要打折。"),
+    ]
+    yy = y + 138
+    for i, (name, desc) in enumerate(rows):
+        if i:
+            rule(d, yy - 34, color=LINE)
+        d.text((M, yy), name, font=F(38, "Bold"), fill=INK)
+        yy = text_block(d, M, yy + 58, desc, F(32, "Regular"), INK2,
+                        max_w=BODY_W, lh=1.5) + 50
+
+    end = yy + 10
+    d.text((M, end), "下面用真实数据，把差距量出来。", font=F(32, "Medium"), fill=RED)
+    footer(d, 3)
+    return img, end + 42
 
 
-def center_text(d, y, text, font, fill, gap=14):
-    for ln in wrap(text, font, W - 160):
-        d.text(((W - font.getlength(ln)) / 2, y), ln, font=font, fill=fill)
-        y += font.size + gap
-    return y
+# ============================================================ 04 实验对象
+def page04():
+    img, d = new_page()
+    y = kicker(d, "实验对象")
+    y = title(d, "我拿什么做的实验", 250, size=74)
+    rule(d, y + 64)
+
+    rows = [
+        ("数据", "UCI Covertype，581,012 条真实森林调查记录"),
+        ("特征", "54 个：海拔、坡度、到水源距离、土壤类型…"),
+        ("任务", "判断这块地属于 7 种森林类型里的哪一种"),
+        ("模型", "ExtraTrees（100 棵树），不用调参的经典基线"),
+    ]
+    yy = y + 128
+    for i, (k, v) in enumerate(rows):
+        d.text((M, yy + 2), k, font=F(32, "Medium"), fill=MUTED)
+        text_block(d, M + 150, yy - 4, v, F(36, "Regular"), INK2,
+                   max_w=BODY_W - 150, lh=1.5)
+        yy += 132
+        if i < len(rows) - 1:
+            rule(d, yy - 40, color=LINE)
+
+    cy = yy + 20
+    card(d, cy, cy + 156, fill=RED_BG, radius=26)
+    text_block(d, M + 46, cy + 44,
+               "数据集本身不是重点。\n重点是下面两种考法，结果差了 3 倍多。",
+               F(36, "Medium"), "#9E2A1C", max_w=BODY_W - 92, lh=1.46)
+    footer(d, 4)
+    return img, cy + 156
 
 
-def left_text(d, x, y, text, font, fill, max_w=880, gap=12):
-    for ln in wrap(text, font, max_w):
-        d.text((x, y), ln, font=font, fill=fill)
-        y += font.size + gap
-    return y
+# ============================================================ 05 考法一
+def page05():
+    img, d = new_page()
+    y = kicker(d, "考法一 · 随机抽题")
+    y = title(d, "把 58 万条\n随机切成训练和测试", 250, size=74)
+    y = text_block(d, M, y + 54,
+                   "随机抽 80% 训练、20% 测试。这是课程作业里最默认的做法。",
+                   F(34, "Regular"), INK2, lh=1.6)
+    rule(d, y + 64)
+
+    y = stat_pair(d, y + 140, [
+        ("准确率", f"{acc_a:.3f}", INK),
+        ("Macro-F1 得分", f"{f1_a:.3f}", INK),
+    ])
+
+    cy = y + 84
+    card(d, cy, cy + 150, fill=CARD, radius=26)
+    d.text((M + 46, cy + 44), "在课堂上，这是一份满分答卷。",
+           font=F(38, "Bold"), fill=INK)
+    d.text((M + 46, cy + 102), "换成任何一份作业，你都会直接交上去。",
+           font=F(32, "Regular"), fill=SUB)
+
+    end = cy + 208
+    d.text((M, end), "但它考的是「同一片区域里的原题」。", font=F(32, "Medium"), fill=RED)
+    footer(d, 5)
+    return img, end + 42
 
 
-def footer(d, page, note="跑个数看看 · 数据实测 01"):
-    d.text((60, H - 70), note, font=F(26), fill=MUTED)
-    t = f"{page}/9"
-    d.text((W - 60 - F(26).getlength(t), H - 70), t, font=F(26), fill=MUTED)
+# ============================================================ 06 考法二
+def page06():
+    img, d = new_page()
+    y = kicker(d, "考法二 · 换个考场")
+    y = title(d, "按地理区域切开\n每次留一整块当考卷", 250, size=74)
+    y = text_block(d, M, y + 54,
+                   "数据自带 4 个地理区域。每次拿 3 块训练、留 1 块测试 —— "
+                   "这一块地方，模型从头到尾没见过。",
+                   F(34, "Regular"), INK2, lh=1.6)
+    rule(d, y + 64)
+
+    y = stat_grid(d, y + 130, [
+        ("区域 1", f"{bs[0]:.3f}", RED),
+        ("区域 2", f"{bs[1]:.3f}", RED),
+        ("区域 3", f"{bs[2]:.3f}", RED),
+        ("区域 4", f"{bs[3]:.3f}", RED),
+    ], cols=4, gapx=14, size=62, label_size=28)
+
+    cy = y + 64
+    card(d, cy, cy + 238, fill=RED_BG, radius=26)
+    f_big = F(118, "Bold")
+    sv = f"{mean_b:.3f}"
+    d.text((M + 46, cy + 44), sv, font=f_big, fill=RED)
+    d.text((M + 46 + f_big.getlength(sv) + 34, cy + 92),
+           f"平均分 · 比随机划分低 {drop:.0f}%", font=F(38, "Bold"), fill="#9E2A1C")
+    d.text((M + 46, cy + 178), f"最差的一块地方，只有 {worst_b:.3f}。",
+           font=F(34, "Regular"), fill="#9E2A1C")
+    footer(d, 6)
+    return img, cy + 238
 
 
-def head(d, title, sub=None):
-    y = 90
-    d.rectangle([60, 70, 60 + 8, 70 + 52], fill=MAIN)
-    d.text((88, 78), title, font=F(38), fill=MAIN)
-    y = 175
-    if sub:
-        y = left_text(d, 60, y, sub, F(30), TEXT, gap=14)
-    return y
+# ============================================================ 07 对比
+def page07():
+    img, d = new_page()
+    y = kicker(d, "放在一起看")
+    y = title(d, "两种考法，一张图", 250, size=74)
+    rule(d, y + 88)
+
+    y = hbar_chart(d, y + 186, [
+        ("随机划分（课程作业里的默认做法）", f1_a, f"{f1_a:.3f}", INK),
+        ("按区域留一（模型没见过的地方）", mean_b, f"{mean_b:.3f}", RED),
+    ], max_value=f1_a, bar_h=74, value_size=56, label_size=33)
+
+    cy = y + 92
+    card(d, cy, cy + 248, fill=CARD, radius=26)
+    d.text((M + 46, cy + 44), f"↓ {drop:.0f}%", font=F(96, "Bold"), fill=RED)
+    text_block(d, M + 46, cy + 172,
+               "模型没变，数据没变，只是考卷换了一种出法。",
+               F(36, "Medium"), INK2, max_w=BODY_W - 92, lh=1.5)
+    footer(d, 7)
+    return img, cy + 248
 
 
-# ---------- 读结果 ----------
-with open(RES_JSON, "r", encoding="utf-8") as f:
-    rows = json.load(f)
-rand = [r for r in rows if r["场景"] == "A_随机划分"][0]
-areas = [r for r in rows if r["场景"] == "B_留出地理区域"]
-acc_a, f1_a = rand["准确率"], rand["Macro_F1"]
-area_f1 = [r["Macro_F1"] for r in areas]
-area_names = [r["测试集"].split(" (")[0].replace("Wilderness_Area", "区域") for r in areas]
-mean_b = sum(area_f1) / len(area_f1)
-worst_b = min(area_f1)
-drop = (mean_b - f1_a) / f1_a * 100
+# ============================================================ 08 为什么
+def page08():
+    img, d = new_page()
+    y = kicker(d, "原因")
+    y = title(d, "因为它只是在背答案", 250, size=74)
+    rule(d, y + 60)
 
-print(f"随机 F1={f1_a:.4f}  区域均值={mean_b:.4f}  跌幅={drop:.1f}%")
+    blocks = [
+        ("随机划分", "mixed", "训练和测试来自同一片区域 —— 相当于考原题。"),
+        ("按区域留一", "split", "整块区域从没进过训练集 —— 相当于换考场。"),
+    ]
+    yy = y + 112
+    for i, (label, mode, cap) in enumerate(blocks):
+        d.text((M, yy), label, font=F(36, "Bold"), fill=INK)
+        if i == 0:
+            legend(d, W - M, yy + 4, [(DOT_TRAIN, "训练集"), (RED, "测试集")])
+        yy += 54
+        compare_strip(d, yy, M, W - M, 132, mode, seed=11 if mode == "mixed" else 0)
+        yy = text_block(d, M, yy + 152, cap, F(32, "Regular"), INK2,
+                        max_w=BODY_W, lh=1.5) + 54
 
-# ---------- 图 4 数据：4 区域柱状图 ----------
-def chart_areas(path):
-    fig, ax = plt.subplots(figsize=(9, 5.6), dpi=150)
-    bars = ax.bar(range(len(area_f1)), area_f1, color="#85B7EB", width=0.6)
-    bars[int(area_f1.index(worst_b))].set_color("#D85A30")
-    ax.axhline(f1_a, color="#185FA5", linestyle="--", linewidth=2,
-               label=f"随机划分 {f1_a:.3f}")
-    ax.set_ylim(0, max(f1_a, max(area_f1)) * 1.25)
-    ax.set_xticks(range(len(area_f1)))
-    ax.set_xticklabels([n.replace("区域", "区域 ") for n in area_names], fontsize=18)
-    ax.set_ylabel("Macro-F1", fontsize=18)
-    ax.tick_params(labelsize=16)
-    for i, v in enumerate(area_f1):
-        ax.text(i, v + 0.015, f"{v:.3f}", ha="center", fontsize=17,
-                color="#D85A30" if v == worst_b else "#185FA5")
-    ax.legend(fontsize=16, loc="upper right")
-    ax.spines[["top", "right"]].set_visible(False)
-    for s in ["bottom", "left"]:
-        ax.spines[s].set_color("#BFBFBF")
-    ax.set_title("按地理区域划分后，各区域 Macro-F1", fontsize=20, color="#2C2C2A", pad=14)
-    fig.tight_layout()
-    fig.savefig(path, facecolor="white")
-    plt.close(fig)
+    end = yy + 6
+    card(d, end, end + 148, fill=RED_BG, radius=26)
+    text_block(d, M + 46, end + 52,
+               "分数掉下来不是模型变笨了，是之前那道题太简单。",
+               F(36, "Bold"), "#9E2A1C", max_w=BODY_W - 92, lh=1.45)
+    footer(d, 8)
+    return img, end + 148
 
 
-# ---------- 图 6 数据：对比柱状 ----------
-def chart_compare(path):
-    fig, ax = plt.subplots(figsize=(9, 5.2), dpi=150)
-    labels = ["随机划分\n（普通考法）", "留出地理区域\n（换个考场）"]
-    vals = [f1_a, mean_b]
-    bars = ax.bar(labels, vals, color=["#185FA5", "#D85A30"], width=0.46)
-    ax.set_ylim(0, max(vals) * 1.3)
-    for b, v in zip(bars, vals):
-        ax.text(b.get_x() + b.get_width() / 2, v + 0.02, f"{v:.3f}",
-                ha="center", fontsize=24, color=b.get_facecolor(), fontweight="bold")
-    ax.annotate("", xy=(1, mean_b + 0.015), xytext=(1, f1_a),
-                arrowprops=dict(arrowstyle="-|>", color="#D85A30", lw=2.5))
-    ax.text(1.06, (f1_a + mean_b) / 2, f"↓{abs(drop):.0f}%", fontsize=24,
-            color="#D85A30", fontweight="bold")
-    ax.set_ylabel("Macro-F1", fontsize=18)
-    ax.tick_params(labelsize=17)
-    ax.spines[["top", "right"]].set_visible(False)
-    for s in ["bottom", "left"]:
-        ax.spines[s].set_color("#BFBFBF")
-    ax.set_title("同一种模型，两种考法", fontsize=20, color="#2C2C2A", pad=14)
-    fig.tight_layout()
-    fig.savefig(path, facecolor="white")
-    plt.close(fig)
+# ============================================================ 09 自查
+def page09():
+    img, d = new_page()
+    y = kicker(d, "所以，你自己也测一下")
+    y = title(d, "三个问题\n判断你的分数是真的吗", 250, size=74)
+    rule(d, y + 62)
+
+    y = checklist(d, y + 110, [
+        "你的测试集和训练集，是不是同一批来源？同一批用户、同一段时间、同一个地方都算。",
+        "把测试集换成另一段时间或另一批人，分数会掉多少？",
+        "别只看准确率。7 个类别里只猜中多数类，准确率也可能很好看。",
+    ], num_size=38, text_size=34, gap=36)
+
+    cy = y + 72
+    card(d, cy, cy + 196, fill=CARD, radius=26)
+    d.text((M + 46, cy + 42), "你的项目掉过多少？", font=F(38, "Bold"), fill=INK)
+    text_block(d, M + 46, cy + 106,
+               "评论区报个数 —— 留言最多的那种数据，我下期拿真实数据跑一遍。",
+               F(33, "Regular"), INK2, max_w=BODY_W - 92, lh=1.5)
+    footer(d, 9)
+    return img, cy + 196
 
 
-tmp_a = os.path.join(OUT_DIR, "_chart_areas.png")
-tmp_c = os.path.join(OUT_DIR, "_chart_compare.png")
-chart_areas(tmp_a)
-chart_compare(tmp_c)
-
-
-def paste(d, path, y, box_w=960):
-    im = Image.open(path).convert("RGB")
-    ratio = im.width / im.height
-    nw = box_w
-    nh = int(nw / ratio)
-    im = im.resize((nw, nh), Image.LANCZOS)
-    canvas = Image.new("RGB", (nw + 40, nh + 40), WHITE)
-    canvas.paste(im, (20, 20))
-    d_img = Image.open(path)  # noqa
-    return canvas, nw + 40, nh + 40
-
-
-def mount(img, canvas, cw, ch, y):
-    img.paste(canvas, ((W - cw) // 2, y))
-    return y + ch
-
-
-# ================= 01 封面 =================
-img, d = card()
-d.rectangle([0, 0, W, 14], fill=MAIN)
-d.text((60, 210), "数据实测 01", font=F(34), fill=MAIN)
-y = 400
-for ln in ["58 万条数据训的模型", "换个考场直接不及格"]:
-    f = F(78)
-    d.text(((W - f.getlength(ln)) / 2, y), ln, font=f, fill=MAIN)
-    y += f.size + 30
-d.line([(140, y + 40), (W - 140, y + 40)], fill=SUB, width=3)
-y += 110
-f_big = F(150)
-s1, s2 = f"{f1_a:.2f}", f"{mean_b:.2f}"
-d.text((150, y), s1, font=f_big, fill=MAIN)
-d.text((150 + f_big.getlength(s1) + 30, y + 10), "→", font=F(90), fill=MUTED)
-d.text((150 + f_big.getlength(s1) + 150, y), s2, font=f_big, fill=ACCENT)
-y += f_big.size + 40
-d.text((155, y), "Macro-F1（随机考法 → 换考场）", font=F(34), fill=MUTED)
-d.line([(140, 1180), (W - 140, 1180)], fill=SUB, width=2)
-src = "数据来源：UCI Covertype · 581,012 条样本"
-d.text(((W - F(28).getlength(src)) / 2, 1225), src, font=F(28), fill=MUTED)
-footer(d, 1)
-img.save(os.path.join(OUT_DIR, "01-封面.png"))
-
-# ================= 02 提出问题 =================
-img, d = card()
-y = head(d, "先问一个问题")
-y += 40
-y = center_text(d, y, "同一份数据、同一个模型，\n只换一种考法，\n成绩能差多少？", F(56), MAIN, gap=26)
-y += 60
-d.rounded_rectangle([80, y, W - 80, y + 260], radius=24, fill=WHITE)
-left_text(d, 130, y + 50, "大多数课程作业里，我们随机抽 20% 数据当考卷。\n但真实世界不会让你抽到\"见过的题\"。\n\n这个实验想看看：差距到底有多大。",
-          F(34), TEXT, max_w=W - 260, gap=22)
-footer(d, 2)
-img.save(os.path.join(OUT_DIR, "02-问题.png"))
-
-# ================= 03 数据从哪来 =================
-img, d = card()
-y = head(d, "数据从哪来")
-rows_txt = [
-    ("数据集", "UCI Covertype（美国林务局公开数据）"),
-    ("样本量", "581,012 条 · 54 个特征"),
-    ("任务", "7 分类：预测森林覆盖类型"),
-    ("模型", "ExtraTrees，100 棵树"),
-    ("划分方式 A", "随机抽 20% 当测试集"),
-    ("划分方式 B", "整块地理区域留作测试集（4 次）"),
+PAGES = [
+    (page01, "01-封面"),
+    (page02, "02-结论"),
+    (page03, "03-跟你有什么关系"),
+    (page04, "04-实验对象"),
+    (page05, "05-随机抽题"),
+    (page06, "06-换个考场"),
+    (page07, "07-对比"),
+    (page08, "08-原因"),
+    (page09, "09-自查"),
 ]
-y += 30
-for k, v in rows_txt:
-    d.rounded_rectangle([80, y, W - 80, y + 128], radius=18, fill=WHITE)
-    d.text((120, y + 30), k, font=F(32), fill=MAIN)
-    d.text((120, y + 76), v, font=F(28), fill=TEXT)
-    y += 148
-footer(d, 3)
-img.save(os.path.join(OUT_DIR, "03-数据来源.png"))
 
-# ================= 04 普通考法的成绩 =================
-img, d = card()
-y = head(d, "考法一：随机抽题", "把 58 万条数据随机分成 80% 训练 / 20% 测试")
-y += 50
-for label, val, col in [("准确率", f"{acc_a:.3f}", MAIN), ("Macro-F1", f"{f1_a:.3f}", MAIN)]:
-    d.rounded_rectangle([90, y, W - 90, y + 240], radius=28, fill=WHITE)
-    d.text((140, y + 45), label, font=F(38), fill=MUTED)
-    fv = F(120)
-    d.text((140, y + 100), val, font=fv, fill=col)
-    y += 270
-d.text((95, y + 10), "看起来是个很能打的模型。", font=F(34), fill=MUTED)
-footer(d, 4)
-img.save(os.path.join(OUT_DIR, "04-随机划分成绩.png"))
+if __name__ == "__main__":
+    for f in os.listdir(OUT):
+        if f.endswith(".png"):
+            os.remove(os.path.join(OUT, f))
 
-# ================= 05 换考场后 =================
-img, d = card()
-y = head(d, "考法二：整块区域留作考卷", "4 个地理区域轮流当测试集，训练集完全不含该区域")
-canvas, cw, ch = paste(d, tmp_a, y)
-y2 = mount(img, canvas, cw, ch, y + 20)
-left_text(d, 90, y2 + 30, f"橙色柱是最差的那个区域，Macro-F1 只有 {worst_b:.3f}。\n虚线是随机划分时的 {f1_a:.3f}。",
-          F(32), TEXT, max_w=W - 180, gap=18)
-footer(d, 5)
-img.save(os.path.join(OUT_DIR, "05-留出区域成绩.png"))
+    over = []
+    for fn, name in PAGES:
+        img, end = fn()
+        save(img, os.path.join(OUT, f"{name}.png"))
+        flag = "OK " if end <= BODY_BOTTOM else "溢出"
+        if end > BODY_BOTTOM:
+            over.append((name, round(end)))
+        print(f"{flag} {name:20s} 内容底部 y={end:.0f}  剩余={BODY_BOTTOM - end:.0f}px")
 
-# ================= 06 对比 =================
-img, d = card()
-y = head(d, "两种考法放一起看")
-canvas, cw, ch = paste(d, tmp_c, y)
-y2 = mount(img, canvas, cw, ch, y + 30)
-d.rounded_rectangle([80, y2 + 30, W - 80, y2 + 215], radius=24, fill=WHITE)
-left_text(d, 130, y2 + 70, f"平均下滑 {abs(drop):.0f}%，最差区域只有 {worst_b:.3f}。\n模型没变，数据没变，只是考卷换了。",
-          F(36), TEXT, max_w=W - 260, gap=20)
-footer(d, 6)
-img.save(os.path.join(OUT_DIR, "06-对比.png"))
-
-# ================= 07 为什么 =================
-img, d = card()
-y = head(d, "为什么会这样")
-top = y + 20
-d.rounded_rectangle([80, top, W - 80, top + 600], radius=26, fill=WHITE)
-cx, cy = W // 2, top + 150
-d.ellipse([cx - 290, cy - 130, cx + 290, cy + 130], outline=MAIN, width=5)
-d.text((cx, cy - 35), "训练集", font=F(42), fill=MAIN, anchor="mm")
-d.text((cx, cy + 40), "区域 1 / 2 / 3", font=F(32), fill=MUTED, anchor="mm")
-by = top + 482
-d.rounded_rectangle([cx - 230, top + 420, cx + 230, top + 545], radius=20,
-                    fill=BG, outline=ACCENT, width=4)
-d.text((cx, by - 22), "测试集：区域 4", font=F(36), fill=ACCENT, anchor="mm")
-d.text((cx, by + 30), "模型从没见过这块地方", font=F(28), fill=MUTED, anchor="mm")
-left_text(d, 130, top + 645,
-          "随机划分时，训练集和测试集来自同一片区域、同样的土壤和海拔分布——相当于考原题。\n\n换成整块区域后，模型面对的是没见过的地理条件，平时背的答案就不管用了。",
-          F(34), TEXT, max_w=W - 260, gap=22)
-footer(d, 7)
-img.save(os.path.join(OUT_DIR, "07-为什么.png"))
-
-# ================= 08 结论 =================
-img, d = card()
-y = head(d, "结论")
-concl = [
-    ("1", "随机划分会系统性高估模型能力", f"本实验里高估了约 {abs(drop):.0f}%"),
-    ("2", "真实数据往往来自\"不同的地方\"", "换个城市、换个时间段、换批用户，都是换考场"),
-    ("3", "做过不等于会做", "这道题刷题的人最懂"),
-]
-y += 30
-for n, t1, t2 in concl:
-    d.rounded_rectangle([80, y, W - 80, y + 240], radius=24, fill=WHITE)
-    d.ellipse([130, y + 55, 200, y + 125], fill=MAIN)
-    tn = F(46)
-    d.text((165 - tn.getlength(n) / 2 + 35, y + 68), n, font=tn, fill=WHITE)
-    d.text((240, y + 55), t1, font=F(38), fill=TEXT)
-    d.text((240, y + 125), t2, font=F(28), fill=MUTED)
-    y += 270
-footer(d, 8)
-img.save(os.path.join(OUT_DIR, "08-结论.png"))
-
-# ================= 09 互动 =================
-img, d = card()
-d.rectangle([0, 0, W, 14], fill=MAIN)
-y = 240
-y = center_text(d, y, "你遇到过\n「平时会做，考试不会」吗？", F(64), MAIN, gap=28)
-y += 80
-d.line([(340, y), (W - 340, y)], fill=SUB, width=3)
-y += 70
-y = center_text(d, y, "评论区聊聊，\n下一期想看我实测什么数据？", F(40), TEXT, gap=22)
-y += 120
-d.text((60, H - 240), "数据来源：UCI Covertype（美国林务局公开数据集）", font=F(26), fill=MUTED)
-d.text((60, H - 195), "样本 581,012 条 · 模型 ExtraTrees(100) · 代码开源在 GitHub", font=F(26), fill=MUTED)
-d.text((60, H - 150), "工具：Python / scikit-learn", font=F(26), fill=MUTED)
-d.text((60, H - 70), "跑个数看看", font=F(30), fill=MAIN)
-img.save(os.path.join(OUT_DIR, "09-互动.png"))
-
-for p in (tmp_a, tmp_c):
-    if os.path.exists(p):
-        os.remove(p)
-
-print("9 张图已生成 ->", OUT_DIR)
-for f in sorted(os.listdir(OUT_DIR)):
-    print("  ", f)
+    print()
+    if over:
+        print("!! 以下页面超出正文区：", over)
+    else:
+        print("全部通过，无溢出")
+    print(f"A f1={f1_a:.4f} acc={acc_a:.4f} | B mean={mean_b:.4f} worst={worst_b:.4f} | drop={drop:.1f}%")
